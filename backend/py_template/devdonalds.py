@@ -43,8 +43,21 @@ def parse():
 # [TASK 1] ====================================================================
 # Takes in a recipeName and returns it in a form that 
 def parse_handwriting(recipeName: str) -> Union[str | None]:
-	# TODO: implement me
-	return recipeName
+	"""
+	This function is used to clean up poorly formatted food names by removing unwanted characters and bad formatting.
+
+	The function will:
+		- Replace whitespaces, udnerscores or hypens (if they appear one or more times) with a single whitespace.
+		- Remove any and all characters that are not letters ('A-Z' or 'a-z') or a single space character with no spaces.
+		- Capitalise the first letter of every word in the recipe name.
+		- Return the updated food name given that it's length is greater than 0. Otherwise it will return 'None'.
+	"""
+
+	recipeName = re.sub(r'[\s_-]+', " ", recipeName)
+	recipeName = re.sub(r'[^A-Za-z ]+', "", recipeName)
+	recipeName = recipeName.title()
+
+	return recipeName if len(recipeName) > 0 else None
 
 
 # [TASK 2] ====================================================================
