@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import List, Dict, Union
 from flask import Flask, request, jsonify
 import re
+import json
+from dataclasses import asdict
 
 # ==== Type Definitions, feel free to add or modify ===========================
 @dataclass
@@ -24,6 +26,10 @@ class Ingredient(CookbookEntry):
 	type: str
 	name: str
 	cook_time: int
+
+@dataclass
+class CoobookError(Exception):
+	pass
 
 # =============================================================================
 # ==== HTTP Endpoint Stubs ====================================================
@@ -120,6 +126,10 @@ def create_entry():
 			cook_time=int(data["cookTime"]) # Converting 'cookTime' to an integer in case it's passed as a string.
 		))
 	
+	pretty_output = json.dumps([asdict(entry) for entry in cookbook], indent=2)
+	print(pretty_output)
+	print(cookbook)
+
 	return 'success', 200
 
 def validate_required_items(required_items_list):
@@ -140,9 +150,91 @@ def validate_required_items(required_items_list):
 # Endpoint that returns a summary of a recipe that corresponds to a query name
 @app.route('/summary', methods=['GET'])
 def summary():
-	# TODO: implement me
-	return 'not implemented', 500
 
+	# We need to get the name of the recipe from the URL.
+	print(cookbook)
+	query_name = request.args.get("name")
+
+	# We need to check if the recipe exists in our cookbook (and if the 'query_name' passed in is a recipe or ingredient).
+	recipte_entry = None
+	for item in cookbook:
+		if item.name == query_name and item.type == 'recipe':
+			recipe_exists = True
+			recipte_entry = item
+		elif item.name == query_name and item.type == 'ingredient':
+			return jsonify({"error": "An ingredient was passed in. Please ONLY pass in a valid recipe!!!"}), 400
+	
+	# If the recipe does not exist in our cookbook we return an error.
+	if recipte_entry is None:
+		return jsonify({"error": "Recipe is not in the cookbook!!!"}), 400
+	
+	# We must get the base ingredients of our recipe. Our 'get_base_ingredients' can raise an error
+	# if a recipe or an ingredient is not in our cookbook.
+	try:
+		list_of_base_ingredients = get_base_ingredients(recipte_entry)
+	except Exception as e:
+		return jsonify({"error": str(e)}), 400
+	
+	total_cook_time = get_total_cook_time(list_of_base_ingredients)
+
+	recipe_summary = {
+		"name": query_name,
+		"cookTime": total_cook_time,
+		"ingredients": list_of_base_ingredients
+	}
+
+	return recipe_summary, 200
+
+def get_base_ingredients(recipe, multiplier=1):
+	base_ingredients = {}
+
+	for required_item in recipe.required_items:
+		entry = None
+		for item in cookbook:
+			if item.name == required_item.name:
+				entry = item
+				break
+		
+		# We check to see if the entry (our recipe or the ingredient) was even in the cookbook. If not we return an error.
+		if entry is None:
+			raise CoobookError("The recipe contains recipes or ingredients that aren't in the cookbook.")
+		
+		total_quantity = required_item.quantity * multiplier
+
+		# Now we need to see if what we are currently processing in the loop is an 'ingredient' or a 'recipe'.
+		if entry.type == "ingredient":
+			# This means we are at a base ingredient we can simply add it to our dict.
+			if required_item.name in base_ingredients:
+				base_ingredients[required_item.name] += total_quantity
+			else:
+				# We create a new entry into our dict for this base ingredient.
+				base_ingredients[required_item.name] = total_quantity
+		elif entry.type == "recipe":
+			# We must then recursively expand in order to get our base ingredients from this recipe.
+			# Because recipe could have a recipe which could have a recipe etc.
+			sub_ingredients = get_base_ingredients(entry, multiplier=total_quantity)
+
+			# We must now add the base 'sub_ingredients' to our dict.
+			for ingredient_name, ingredient_quantity in sub_ingredients.items():
+				if ingredient_name in base_ingredients:
+					base_ingredients[ingredient_name] += ingredient_quantity
+				else:
+					base_ingredients[ingredient_name] = ingredient_quantity
+	
+	return base_ingredients
+
+def get_total_cook_time(list_of_base_ingredients):
+	print(list_of_base_ingredients)
+	total_cook_time = 0
+
+	# We loop through our base ingredients list and our cook book in order to get the time it takes
+	# to cook the base ingredient.
+	for ingredient, quantity in list_of_base_ingredients.items():
+		for item in cookbook:
+			if item.name == ingredient:
+				total_cook_time += item.cook_time * quantity
+	
+	return total_cook_time
 
 # =============================================================================
 # ==== DO NOT TOUCH ===========================================================
