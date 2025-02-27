@@ -27,10 +27,6 @@ class Ingredient(CookbookEntry):
 	name: str
 	cook_time: int
 
-@dataclass
-class CoobookError(Exception):
-	pass
-
 # =============================================================================
 # ==== HTTP Endpoint Stubs ====================================================
 # =============================================================================
@@ -126,10 +122,6 @@ def create_entry():
 			cook_time=int(data["cookTime"]) # Converting 'cookTime' to an integer in case it's passed as a string.
 		))
 	
-	pretty_output = json.dumps([asdict(entry) for entry in cookbook], indent=2)
-	print(pretty_output)
-	print(cookbook)
-
 	return 'success', 200
 
 def validate_required_items(required_items_list):
@@ -150,28 +142,28 @@ def validate_required_items(required_items_list):
 # Endpoint that returns a summary of a recipe that corresponds to a query name
 @app.route('/summary', methods=['GET'])
 def summary():
-
+	"""
+	This function provides a summary about the recipe that is to be cooked. It includes the name, total time taken to cook the recipe and the ingredients needed.
+	"""
 	# We need to get the name of the recipe from the URL.
-	print(cookbook)
 	query_name = request.args.get("name")
 
 	# We need to check if the recipe exists in our cookbook (and if the 'query_name' passed in is a recipe or ingredient).
-	recipte_entry = None
+	recipe_entry = None
 	for item in cookbook:
 		if item.name == query_name and item.type == 'recipe':
-			recipe_exists = True
-			recipte_entry = item
+			recipe_entry = item
 		elif item.name == query_name and item.type == 'ingredient':
 			return jsonify({"error": "An ingredient was passed in. Please ONLY pass in a valid recipe!!!"}), 400
 	
 	# If the recipe does not exist in our cookbook we return an error.
-	if recipte_entry is None:
+	if recipe_entry is None:
 		return jsonify({"error": "Recipe is not in the cookbook!!!"}), 400
 	
 	# We must get the base ingredients of our recipe. Our 'get_base_ingredients' can raise an error
 	# if a recipe or an ingredient is not in our cookbook.
 	try:
-		list_of_base_ingredients = get_base_ingredients(recipte_entry)
+		list_of_base_ingredients = get_base_ingredients(recipe_entry)
 	except Exception as e:
 		return jsonify({"error": str(e)}), 400
 	
@@ -186,6 +178,11 @@ def summary():
 	return recipe_summary, 200
 
 def get_base_ingredients(recipe, multiplier=1):
+	"""
+	This is a helper recursive function that allows us to get the base ingredients from a recipe that is to be cooked. I've made it recursive because a
+	recipe can include a recipe which can include a recipe etc (like the "Skibidi Spaghetti" example from the spec. It was made up of a "Meatball" recipe.).
+	As such we need to recursively expand our recipe in order to get the base ingredients and then we simply return those ingredients with their respective quantities.
+	"""
 	base_ingredients = {}
 
 	for required_item in recipe.required_items:
@@ -197,7 +194,7 @@ def get_base_ingredients(recipe, multiplier=1):
 		
 		# We check to see if the entry (our recipe or the ingredient) was even in the cookbook. If not we return an error.
 		if entry is None:
-			raise CoobookError("The recipe contains recipes or ingredients that aren't in the cookbook.")
+			raise Exception("The recipe contains recipes or ingredients that aren't in the cookbook.")
 		
 		total_quantity = required_item.quantity * multiplier
 
@@ -224,7 +221,9 @@ def get_base_ingredients(recipe, multiplier=1):
 	return base_ingredients
 
 def get_total_cook_time(list_of_base_ingredients):
-	print(list_of_base_ingredients)
+	"""
+	This function simply computes the total cook time of the recipe given the list of base ingredients needed to make the recipe itself.
+	"""
 	total_cook_time = 0
 
 	# We loop through our base ingredients list and our cook book in order to get the time it takes
